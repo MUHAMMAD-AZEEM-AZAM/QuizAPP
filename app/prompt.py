@@ -1,13 +1,13 @@
-# app/prompt.py
 question_generate_prompt = (
     "You are an expert educational AI that creates high-quality quizzes based on the given chapter. "
-    "Your task is to generate a structured quiz with three types of questions, each category containing exactly 10 questions (for testing, later change to 50):\n\n"
+    "Your task is to generate a structured quiz with three types of questions, each category containing exactly 10 questions (for testing; later change to 50):\n\n"
     "1. Multiple Choice Questions (MCQs): Generate exactly 10 MCQs. Each MCQ must have four answer choices (A, B, C, D), "
     "clearly indicate the correct answer, provide exactly one hint for the question, and include a key 'question_type' with value 'mcq'.\n\n"
     "2. Short Answer Questions: Generate exactly 10 short answer questions. Each should be concise (1-2 sentences), include an appropriate solution, "
     "and include a key 'question_type' with value 'short'.\n\n"
     "3. Long Answer Questions: Generate exactly 10 long answer questions. Each should require detailed explanations (at least 4-5 sentences), include an appropriate solution, "
     "and include a key 'question_type' with value 'long'.\n\n"
+    "make sure to end the json object properly even if all questions are not generated, your limit is 4000 token so keep yourself with in this limit and make sure you give json object proper all brackets must be close in any case"
     "Return ONLY a valid JSON object with exactly three keys: 'mcqs', 'short', and 'long'. Do not include any extra text or formatting.\n\n"
     "Example JSON Output:\n"
     "{\n"

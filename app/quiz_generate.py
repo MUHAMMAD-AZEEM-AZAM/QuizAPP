@@ -1,12 +1,14 @@
-# app/quiz_generate.py
 import re
 import json
 import fitz  # PyMuPDF
 import os
+import time
 from openai import OpenAI
 from dotenv import load_dotenv
 from prompt import question_generate_prompt
 from get_chapter_from_book import extract_chapters_from_book  # Your chapter extraction function
+from json_repair import repair_json
+
 
 load_dotenv()
 
@@ -24,81 +26,86 @@ def extract_chapter_text(pdf_path: str, start_page: int, end_page: int) -> str:
     doc.close()
     return chapter_text
 
-def truncate_text(text: str, max_words: int = 100) -> str:
+def truncate_text(text: str, max_words: int = 60) -> str:
     words = text.split()
     return " ".join(words[:max_words]) if len(words) > max_words else text
 
 def generate_quiz(chapter_text: str) -> str:
-    """
-    Uses the DeepSeek model (via OpenAI API) to generate a quiz based on the chapter text.
-    The prompt instructs the model to output a valid JSON object with keys: 'mcqs', 'short', and 'long'.
-    A custom stop marker is used to help ensure complete JSON output.
-    """
-    # Further truncate the chapter text to reduce input tokens (adjust max_words as needed)
-    chapter_text = truncate_text(chapter_text, max_words=50)
-    
-    # Construct the prompt; add a unique marker at the end that the model should output
-    detailed_prompt = (
-        question_generate_prompt + "\n\n" + chapter_text +
-        "\n\nPlease finish the JSON output and then output the marker: ##END_JSON##"
-    )
-
+    # Further truncate chapter text
+    chapter_text = truncate_text(chapter_text, max_words=80)
+    detailed_prompt = question_generate_prompt + "\n\n" + chapter_text + "\n\nPlease finish the JSON output completely."
     response = client.chat.completions.create(
         model=os.getenv("AI_MODEL_ID"),  # e.g., "deepseek-ai/deepseek-llm-67b-chat"
         messages=[
             {"role": "system", "content": "You are a professional quiz generator AI."},
             {"role": "user", "content": detailed_prompt},
         ],
-        max_tokens=3000,  # Adjust if needed
-        temperature=0.7,
-        stop=["##END_JSON##"]
+        max_tokens=3000,
+        temperature=0.7
     )
-    output = response.choices[0].message.content.strip()
-    print("This is output",output)
-    # Remove the custom stop marker if present
-    if output.endswith("##END_JSON##"):
-        output = output.replace("##END_JSON##", "").strip()
-    return output
+    return response.choices[0].message.content
 
 def generate_quiz_for_chapter(chapter: dict, pdf_path: str) -> dict:
-    chapter_text = extract_chapter_text(pdf_path, chapter["start_page"], chapter["end_page"])
-    quiz_output = generate_quiz(chapter_text)
-    try:
-        json_match = re.search(r"({.*})", quiz_output, re.DOTALL)
-        if json_match:
-            quiz_json_str = json_match.group(1)
-        else:
-            quiz_json_str = quiz_output
-        quiz_json = json.loads(quiz_json_str)
-        return quiz_json
-    except json.JSONDecodeError as e:
-        raise Exception(f"Error parsing quiz output for {chapter.get('title')}: {e}. Received output: {quiz_output}")
+    """
+    Given a chapter dictionary, generate the quiz using the DeepSeek model.
+    Retry up to 3 times if JSON parsing fails.
+    """
+    max_retries = 3
+    retry_count = 0
+    while retry_count < max_retries:
+        chapter_text = extract_chapter_text(pdf_path, chapter["start_page"], chapter["end_page"])
+        quiz_output = generate_quiz(chapter_text)
+        print(f"Quiz output for {chapter['title']} (try {retry_count+1}):", quiz_output)
+        try:
+            json_match = re.search(r"({.*})", quiz_output, re.DOTALL)
+            if json_match:
+                quiz_json_str = json_match.group(1)
+            else:
+                quiz_json_str = quiz_output
+                
+            good_json_string = repair_json(quiz_json_str)
+            quiz_json = json.loads(good_json_string )
+            return quiz_json
+        except json.JSONDecodeError as e:
+            retry_count += 1
+            print(f"Error parsing quiz output for {chapter.get('title')}: {e}. Retrying ({retry_count}/{max_retries})...")
+            time.sleep(1)
+    raise Exception(f"Failed to parse quiz output for {chapter.get('title')} after {max_retries} retries.")
 
-def generate_quiz_from_book(pdf_path: str, user_id: str, book_name: str) -> dict:
+async def generate_quiz_from_book(pdf_path: str, user_id: str, book_name: str) -> dict:
     """
-    Processes the given PDF to extract chapters, generates quizzes for every chapter,
-    and constructs a Book object with the user_id, book_name, and list of chapters.
-    Each chapter contains its chapter number (based on its position), title, and generated quiz.
+    Processes the PDF: extracts chapters, and for each chapter (limited to the first two for testing):
+      - Generates the quiz for the chapter.
+      - Immediately stores the chapter quiz in the 'chapters' collection.
+      - Updates the Book object with the stored chapter information.
+    Finally, stores the complete Book object in the 'books' collection.
     """
+    from database import chapters_collection, books_collection
+
     chapters_data = extract_chapters_from_book(pdf_path)
-    book_chapters = []
+    # Limit to the first two chapters for testing
+    chapters_data = chapters_data
+    stored_chapters = []
     
     for i, chapter in enumerate(chapters_data):
+        print(f"Processing {chapter['title']}")
         quiz_data = generate_quiz_for_chapter(chapter, pdf_path)
-        
         chapter_obj = {
-            "chapter_number": i + 1,  # Using the position (starting at 1)
+            "chapter_number": i + 1,
             "title": chapter["title"],
             "quiz": quiz_data
         }
-        print("This is chapter object",chapter_obj)
-        book_chapters.append(chapter_obj)
+        # Store this chapter in the DB
+        result = await chapters_collection.insert_one(chapter_obj)
+        chapter_obj["_id"] = str(result.inserted_id)
+        stored_chapters.append(chapter_obj)
     
+    # Create a Book object that references all stored chapters
     book_obj = {
         "user_id": user_id,
         "book_name": book_name,
-        "chapters": book_chapters
+        "chapters": stored_chapters
     }
-    print("This is book object",book_obj)
+    result = await books_collection.insert_one(book_obj)
+    book_obj["_id"] = str(result.inserted_id)
     return book_obj
-

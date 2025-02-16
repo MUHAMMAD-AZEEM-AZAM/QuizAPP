@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 
 app = FastAPI(title="Quiz Generator API")
 
-app.include_router(quiz_router, prefix="/api")
+app.include_router(quiz_router, prefix="")
 from auth import auth_router
 from fastapi.middleware.cors import CORSMiddleware
 load_dotenv()
