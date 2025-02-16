@@ -1,0 +1,21 @@
+# Python
+*.py[cod]
+*.pyo
+__pycache__/
+*.so
+
+# FastAPI
+*.log
+*.pid
+*.swp
+*.swo
+
+# Virtual Environment
+.env
+venv/
+ENV/
+env.bak/
+env/
+
+# Uploads
+uploads/
