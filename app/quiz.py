@@ -3,6 +3,10 @@ from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
 from quiz_generate import generate_quiz_from_book
 from database import books_collection  # Used if needed elsewhere
 from dotenv import load_dotenv
+from models import Book
+from typing import List
+from bson import ObjectId
+import logging
 
 load_dotenv()
 
@@ -41,4 +45,35 @@ async def generate_book_quiz_endpoint(
         raise HTTPException(status_code=500, detail=f"Error generating book quiz: {e}")
     
     os.remove(file_path)
-    return {"message": "Book quiz generated and stored successfully", "book": book_quiz}
+    return {"message": "Book quiz generated and stored successfully"}
+
+
+
+@quiz_router.get("/books/{user_id}")
+async def get_books_by_user(user_id: str):
+    """
+    Retrieves all books for the given user_id and removes the chapter quizzes from the response.
+    """
+    try:
+        logging.info(f"Querying for books with user_id: {user_id}")
+        
+        # Query for books with matching user_id
+        books_cursor = books_collection.find({"user_id": user_id})
+        books = []
+        async for book in books_cursor:
+            logging.info(f"Found book: {book}")
+            
+            # Convert the _id to a string
+            book["_id"] = str(book["_id"])
+            
+            # Remove the 'quiz' key from each chapter to avoid returning quiz details
+            if "chapters" in book:
+                for chapter in book["chapters"]:
+                    chapter.pop("quiz", None)  # Safely remove 'quiz' if present
+            
+            books.append(book)
+        
+        logging.info(f"Total books found: {len(books)}")
+        return {"message": "Books found for user", "books": books}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error retrieving books: {e}")

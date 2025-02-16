@@ -4,6 +4,8 @@ import re
 import json
 import os
 from dotenv import load_dotenv
+from json_repair import repair_json
+
 load_dotenv() 
 
 # **********Function to extract chapter information from a PDF file**********
@@ -113,7 +115,9 @@ def refine_chapter_info(chapters):
 
 # Convert the chapters string to a JSON object
     try:
-        chapters_obj = json.loads(chapters)
+        print(chapters)
+        good_json_string = repair_json(chapters)
+        chapters_obj = json.loads(good_json_string)
         print("Parsed JSON object:")
         filtered_chapters = [chapter for chapter in chapters_obj if chapter["start_page"] != chapter["end_page"]]
 
