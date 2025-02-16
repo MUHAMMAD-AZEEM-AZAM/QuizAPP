@@ -117,7 +117,7 @@ def refine_chapter_info(chapters):
         print("Parsed JSON object:")
         filtered_chapters = [chapter for chapter in chapters_obj if chapter["start_page"] != chapter["end_page"]]
 
-        print("Filtered Chapters:", json.dumps(filtered_chapters, indent=2, ensure_ascii=False))
+        json.dumps(filtered_chapters, indent=2, ensure_ascii=False)
         return filtered_chapters
     except json.JSONDecodeError as e:
         print("Error decoding JSON:", e)
@@ -125,7 +125,7 @@ def refine_chapter_info(chapters):
         print(chapters)
 
 
-def extract_chapters_from_book(pdf_path):
+def extract_chapters_from_book(pdf_path: str) -> list:
     # Extract chapter information from a PDF file
     chapters = extract_chapter_info(pdf_path, offset=0)
     # Refine the chapter information using a language model

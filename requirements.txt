@@ -8,3 +8,6 @@ openai
 python-multipart
 python-dotenv
 bcrypt 
+passlib
+pyJWT
+json-repair
