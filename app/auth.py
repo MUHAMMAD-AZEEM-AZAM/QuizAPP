@@ -48,4 +48,4 @@ async def just_login(user: User):
     
     # Generate JWT Token
     token = create_access_token({"sub": user.username})
-    return {"token": token, "token_type": "bearer", "auth_type": auth_type}
+    return {"token": token, "token_type": "bearer", "auth_type": auth_type, "statusCode": 200, "message": f"User {auth_type} successful", "role": "user"}
