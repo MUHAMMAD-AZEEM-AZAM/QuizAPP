@@ -1,76 +1,54 @@
+# app/routes/quiz.py
 import os
-import tempfile
 import json
-import re
-from fastapi import APIRouter, HTTPException
-from models import Quiz  # This now works because Quiz is defined in models.py
-from database import books_collection  # Example: if you're storing quiz data in MongoDB
-from fastapi import APIRouter, UploadFile, File, HTTPException
+from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
 from quiz_generate import generate_quiz_from_book
+from database import books_collection
+from dotenv import load_dotenv
+
+load_dotenv()
 
 quiz_router = APIRouter()
 
-@quiz_router.post("/quizzes/", response_model=dict)
-async def create_quiz(quiz: Quiz):
-    quiz_dict = quiz.model_dump()
-    # For example, if storing in a MongoDB collection:
-    result = await books_collection.insert_one(quiz_dict)
-    if result.inserted_id:
-        return {"message": "Quiz saved successfully", "quiz_id": str(result.inserted_id)}
-    raise HTTPException(status_code=500, detail="Failed to save quiz")
+# Dummy dependency for current user (replace with your JWT dependency)
+def get_current_user():
+    # In a real scenario, decode JWT and return user info
+    return {"user_id": "sample_user_id"}
 
-@quiz_router.get("/quizzes/", response_model=dict)
-async def get_quizzes():
-    quizzes_cursor = books_collection.find()
-    quizzes = []
-    async for quiz in quizzes_cursor:
-        quiz["_id"] = str(quiz["_id"])
-        quizzes.append(quiz)
-    return {"quizzes": quizzes}
-
-
-@quiz_router.post("/generate_quiz_from_book/")
-async def generate_quiz_from_book_endpoint(book_file: UploadFile = File(...)):
-    """
-    Accepts a PDF file upload, saves it to the server's "upload" folder,
-    calls generate_quiz_from_book to generate a quiz, and returns the quiz JSON.
-    """
+@quiz_router.post("/generate_book_quiz/")
+async def generate_book_quiz_endpoint(
+    book_file: UploadFile = File(...),
+    book_name: str = "Default Book Name",
+    current_user: dict = Depends(get_current_user)
+):
     if book_file.content_type != "application/pdf":
         raise HTTPException(status_code=400, detail="Only PDF files are supported.")
 
-    # Define the upload folder relative to the current working directory
+    # Save file in 'upload' folder
     upload_dir = os.path.join(os.getcwd(), "upload")
     if not os.path.exists(upload_dir):
         os.makedirs(upload_dir)
     
-    # Save the uploaded file to the upload folder
+    file_path = os.path.join(upload_dir, book_file.filename)
     try:
-        file_path = os.path.join(upload_dir, book_file.filename)
         with open(file_path, "wb") as f:
-            file_content = await book_file.read()
-            f.write(file_content)
+            content = await book_file.read()
+            f.write(content)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error saving uploaded file: {e}")
 
-    # Generate the quiz by calling our quiz generation function
     try:
-        quiz_result = generate_quiz_from_book(file_path)
+        book_quiz = generate_quiz_from_book(file_path, current_user["user_id"], book_name)
     except Exception as e:
         os.remove(file_path)
-        raise HTTPException(status_code=500, detail=f"Error generating quiz: {e}")
+        raise HTTPException(status_code=500, detail=f"Error generating book quiz: {e}")
     
-    # Comment out the file removal for debugging purposes
-    # os.remove(file_path)
-
-    # Ensure the quiz result is valid JSON (or a dictionary)
-    if not isinstance(quiz_result, dict):
-        try:
-            json_match = re.search(r"({.*})", quiz_result, re.DOTALL)
-            if json_match:
-                quiz_result = json.loads(json_match.group(1))
-            else:
-                raise ValueError("Quiz result is not a valid JSON object.")
-        except Exception as e:
-            raise HTTPException(status_code=422, detail=f"Error parsing quiz output: {e}")
-
-    return {"message": "Quiz generated successfully", "quiz": quiz_result}
+    try:
+        result = await books_collection.insert_one(book_quiz)
+        book_id = str(result.inserted_id)
+    except Exception as e:
+        os.remove(file_path)
+        raise HTTPException(status_code=500, detail=f"Error saving book quiz to database: {e}")
+    
+    os.remove(file_path)
+    return {"message": "Book quiz generated and stored successfully", "book_id": book_id}
