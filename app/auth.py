@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 # JWT Secret Key
 SECRET_KEY = "your_secret_key"
 ALGORITHM = "HS256"
-
+#
 # Password Hashing
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
