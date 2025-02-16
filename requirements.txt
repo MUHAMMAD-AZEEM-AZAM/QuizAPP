@@ -7,3 +7,4 @@ pymupdf
 openai
 python-multipart
 python-dotenv
+bcrypt 

@@ -10,3 +10,5 @@ client = AsyncIOMotorClient(MONGO_URL)
 db = client[DATABASE_NAME]
 # Collection to store books (each book document includes chapters and questions)
 books_collection = db["books"]
+
+users_collection = db["users"]
